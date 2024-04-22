@@ -70,8 +70,7 @@ impl FromSegments<f64> for PcSaftRecord {
             .flat_map(|(s, n)| {
                 s.association_records.iter().map(move |record| {
                     AssociationRecord::new(
-                        record.parameters.kappa_ab,
-                        record.parameters.epsilon_k_ab,
+                        record.parameters,
                         record.na * n,
                         record.nb * n,
                         record.nc * n,
@@ -216,18 +215,17 @@ impl PcSaftRecord {
         na: Option<f64>,
         nb: Option<f64>,
         nc: Option<f64>,
-        association_records: Option<Vec<AssociationRecord>>,
+        association_records: Option<Vec<AssociationRecord<PcSaftAssociationRecord>>>,
         viscosity: Option<[f64; 4]>,
         diffusion: Option<[f64; 5]>,
         thermal_conductivity: Option<[f64; 4]>,
     ) -> PcSaftRecord {
-        let association_records = AssociationRecords::new(
-            PcSaftAssociationRecord::new(kappa_ab, epsilon_k_ab),
-            na,
-            nb,
-            nc,
-            association_records,
-        );
+        let assoc = if let (Some(kappa_ab), Some(epsilon_k_ab)) = (kappa_ab, epsilon_k_ab) {
+            Some(PcSaftAssociationRecord::new(kappa_ab, epsilon_k_ab))
+        } else {
+            None
+        };
+        let association_records = AssociationRecords::new(assoc, na, nb, nc, association_records);
         PcSaftRecord {
             m,
             sigma,
@@ -614,8 +612,8 @@ impl PcSaftParameters {
                         o,
                         "\n|{}|{}|{}|{}|{}|{}|",
                         component,
-                        association.kappa_ab,
-                        association.epsilon_k_ab,
+                        association.parameters.kappa_ab,
+                        association.parameters.epsilon_k_ab,
                         association.na,
                         association.nb,
                         association.nc

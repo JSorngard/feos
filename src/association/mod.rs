@@ -23,7 +23,7 @@ struct AssociationSite<A> {
     parameters: A,
 }
 
-impl<A> AssociationSite<A> {
+impl<A: Clone + Default> AssociationSite<A> {
     fn new(assoc_comp: usize, site_index: usize, n: f64, parameters: A) -> Self {
         Self {
             assoc_comp,
@@ -53,7 +53,7 @@ pub struct AssociationRecord<A> {
     pub nc: f64,
 }
 
-impl<A> AssociationRecord<A> {
+impl<A: Clone + Default> AssociationRecord<A> {
     pub fn new(parameters: A, na: f64, nb: f64, nc: f64) -> Self {
         Self {
             parameters,
@@ -81,29 +81,22 @@ impl<A: fmt::Display> fmt::Display for AssociationRecord<A> {
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
-#[serde(from = "AssociationRecordsSerde")]
-#[serde(into = "AssociationRecordsSerde")]
-pub struct AssociationRecords(Vec<AssociationRecord>);
+#[serde(from = "AssociationRecordsSerde<A>")]
+#[serde(into = "AssociationRecordsSerde<A>")]
+pub struct AssociationRecords<A: Clone + Default>(Vec<AssociationRecord<A>>);
 
-impl AssociationRecords {
+impl<A: Clone + Default> AssociationRecords<A> {
     pub fn new(
-        kappa_ab: Option<f64>,
-        epsilon_k_ab: Option<f64>,
+        parameters: Option<A>,
         na: Option<f64>,
         nb: Option<f64>,
         nc: Option<f64>,
-        association_records: Option<Vec<AssociationRecord>>,
+        association_records: Option<Vec<AssociationRecord<A>>>,
     ) -> Self {
         let mut association_records = association_records.unwrap_or_default();
-        if kappa_ab.is_some()
-            || epsilon_k_ab.is_some()
-            || na.is_some()
-            || nb.is_some()
-            || nc.is_some()
-        {
+        if let Some(parameters) = parameters {
             association_records.push(AssociationRecord::new(
-                kappa_ab.unwrap_or_default(),
-                epsilon_k_ab.unwrap_or_default(),
+                parameters,
                 na.unwrap_or_default(),
                 nb.unwrap_or_default(),
                 nc.unwrap_or_default(),
@@ -113,27 +106,27 @@ impl AssociationRecords {
     }
 }
 
-impl Deref for AssociationRecords {
-    type Target = Vec<AssociationRecord>;
+impl<A: Clone + Default> Deref for AssociationRecords<A> {
+    type Target = Vec<AssociationRecord<A>>;
 
-    fn deref(&self) -> &Vec<AssociationRecord> {
+    fn deref(&self) -> &Vec<AssociationRecord<A>> {
         &self.0
     }
 }
 
-impl DerefMut for AssociationRecords {
-    fn deref_mut(&mut self) -> &mut Vec<AssociationRecord> {
+impl<A: Clone + Default> DerefMut for AssociationRecords<A> {
+    fn deref_mut(&mut self) -> &mut Vec<AssociationRecord<A>> {
         &mut self.0
     }
 }
 
-impl FromIterator<AssociationRecord> for AssociationRecords {
-    fn from_iter<T: IntoIterator<Item = AssociationRecord>>(iter: T) -> Self {
+impl<A: Clone + Default> FromIterator<AssociationRecord<A>> for AssociationRecords<A> {
+    fn from_iter<T: IntoIterator<Item = AssociationRecord<A>>>(iter: T) -> Self {
         Self(Vec::from_iter(iter))
     }
 }
 
-impl fmt::Display for AssociationRecords {
+impl<A: Clone + Default + fmt::Display> fmt::Display for AssociationRecords<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         for (i, record) in self.0.iter().enumerate() {
@@ -147,16 +140,16 @@ impl fmt::Display for AssociationRecords {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AssociationRecordsSerde {
+struct AssociationRecordsSerde<A> {
     #[serde(flatten)]
-    single: Option<AssociationRecord>,
+    single: Option<AssociationRecord<A>>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    association_records: Vec<AssociationRecord>,
+    association_records: Vec<AssociationRecord<A>>,
 }
 
-impl From<AssociationRecordsSerde> for AssociationRecords {
-    fn from(value: AssociationRecordsSerde) -> Self {
+impl<A: Clone + Default> From<AssociationRecordsSerde<A>> for AssociationRecords<A> {
+    fn from(value: AssociationRecordsSerde<A>) -> Self {
         let mut association_records = value.association_records;
         if let Some(record) = value.single {
             association_records.push(record);
@@ -165,8 +158,8 @@ impl From<AssociationRecordsSerde> for AssociationRecords {
     }
 }
 
-impl From<AssociationRecords> for AssociationRecordsSerde {
-    fn from(value: AssociationRecords) -> Self {
+impl<A: Clone + Default> From<AssociationRecords<A>> for AssociationRecordsSerde<A> {
+    fn from(value: AssociationRecords<A>) -> Self {
         let mut association_records = value.0;
         let single = if association_records.len() == 1 {
             association_records.pop()
@@ -336,7 +329,7 @@ impl<P: AssociationStrength> Association<P> {
 }
 
 pub trait AssociationStrength: HardSphereProperties {
-    type Record: Copy;
+    type Record: Copy + Default;
     type BinaryRecord: Copy;
 
     fn association_strength<D: DualNum<f64> + Copy>(
