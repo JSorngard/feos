@@ -22,7 +22,7 @@ struct AssociationSite<A> {
     parameters: A,
 }
 
-impl<A: Clone + Default> AssociationSite<A> {
+impl<A> AssociationSite<A> {
     fn new(assoc_comp: usize, site_index: usize, n: f64, parameters: A) -> Self {
         Self {
             assoc_comp,
@@ -52,7 +52,7 @@ pub struct AssociationRecord<A> {
     pub nc: f64,
 }
 
-impl<A: Clone + Default> AssociationRecord<A> {
+impl<A> AssociationRecord<A> {
     pub fn new(parameters: A, na: f64, nb: f64, nc: f64) -> Self {
         Self {
             parameters,
@@ -235,7 +235,7 @@ impl<P: AssociationStrength> Association<P> {
 }
 
 pub trait AssociationStrength: HardSphereProperties {
-    type Record: Copy + Default;
+    type Record: Copy;
     type BinaryRecord: Copy;
 
     fn association_strength<D: DualNum<f64> + Copy>(
