@@ -1,6 +1,5 @@
 use crate::association::{
-    AssociationParameters, AssociationRecord, AssociationRecords, AssociationStrength,
-    BinaryAssociationRecord,
+    AssociationParameters, AssociationRecord, AssociationStrength, BinaryAssociationRecord,
 };
 use crate::hard_sphere::{HardSphereProperties, MonomerShape};
 use conv::ValueInto;
@@ -16,8 +15,54 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
+#[derive(Serialize, Deserialize)]
+struct PcSaftRecordSerde {
+    /// Segment number
+    pub m: f64,
+    /// Segment diameter in units of Angstrom
+    pub sigma: f64,
+    /// Energetic parameter in units of Kelvin
+    pub epsilon_k: f64,
+    /// Dipole moment in units of Debye
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mu: Option<f64>,
+    /// Quadrupole moment in units of Debye * Angstrom
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q: Option<f64>,
+    /// Association volume parameter
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kappa_ab: Option<f64>,
+    /// Association energy parameter in units of Kelvin
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epsilon_k_ab: Option<f64>,
+    /// \# of association sites of type A
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub na: Option<f64>,
+    /// \# of association sites of type B
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nb: Option<f64>,
+    /// \# of association sites of type C
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nc: Option<f64>,
+    /// Association parameters
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
+    pub association_records: Vec<AssociationRecord<PcSaftAssociationRecord>>,
+    /// Entropy scaling coefficients for the viscosity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viscosity: Option<[f64; 4]>,
+    /// Entropy scaling coefficients for the diffusion coefficient
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diffusion: Option<[f64; 5]>,
+    /// Entropy scaling coefficients for the thermal conductivity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thermal_conductivity: Option<[f64; 4]>,
+}
+
 /// PC-SAFT pure-component parameters.
 #[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(from = "PcSaftRecordSerde")]
+#[serde(into = "PcSaftRecordSerde")]
 pub struct PcSaftRecord {
     /// Segment number
     pub m: f64,
@@ -33,7 +78,7 @@ pub struct PcSaftRecord {
     pub q: Option<f64>,
     /// Association parameters
     #[serde(flatten)]
-    pub association_records: AssociationRecords<PcSaftAssociationRecord>,
+    pub association_records: Vec<AssociationRecord<PcSaftAssociationRecord>>,
     /// Entropy scaling coefficients for the viscosity
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viscosity: Option<[f64; 4]>,
@@ -43,6 +88,60 @@ pub struct PcSaftRecord {
     /// Entropy scaling coefficients for the thermal conductivity
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thermal_conductivity: Option<[f64; 4]>,
+}
+
+impl From<PcSaftRecordSerde> for PcSaftRecord {
+    fn from(value: PcSaftRecordSerde) -> Self {
+        Self::new(
+            value.m,
+            value.sigma,
+            value.epsilon_k,
+            value.mu,
+            value.q,
+            value.kappa_ab,
+            value.epsilon_k_ab,
+            value.na,
+            value.nb,
+            value.nc,
+            value.association_records,
+            value.viscosity,
+            value.diffusion,
+            value.thermal_conductivity,
+        )
+    }
+}
+
+impl From<PcSaftRecord> for PcSaftRecordSerde {
+    fn from(mut value: PcSaftRecord) -> Self {
+        let [kappa_ab, epsilon_k_ab, na, nb, nc] = if value.association_records.len() == 1 {
+            let r = value.association_records.pop().unwrap();
+            [
+                Some(r.parameters.kappa_ab),
+                Some(r.parameters.epsilon_k_ab),
+                Some(r.na),
+                Some(r.nb),
+                Some(r.nc),
+            ]
+        } else {
+            [None; 5]
+        };
+        Self {
+            m: value.m,
+            sigma: value.sigma,
+            epsilon_k: value.epsilon_k,
+            mu: value.mu,
+            q: value.q,
+            kappa_ab,
+            epsilon_k_ab,
+            na,
+            nb,
+            nc,
+            association_records: value.association_records,
+            viscosity: value.viscosity,
+            diffusion: value.diffusion,
+            thermal_conductivity: value.thermal_conductivity,
+        }
+    }
 }
 
 impl FromSegments<f64> for PcSaftRecord {
@@ -187,8 +286,32 @@ impl std::fmt::Display for PcSaftRecord {
         if let Some(n) = &self.q {
             write!(f, ", q={}", n)?;
         }
-        if !self.association_records.is_empty() {
-            write!(f, ", association_records={}", self.association_records)?;
+        match self.association_records.len() {
+            0 => (),
+            1 => {
+                let r = self.association_records[0];
+                write!(f, ", kappa_ab={}", r.parameters.kappa_ab)?;
+                write!(f, ", epsilon_k_ab={}", r.parameters.epsilon_k_ab)?;
+                if !r.na.is_zero() {
+                    write!(f, ", na={}", r.na)?;
+                }
+                if !r.nb.is_zero() {
+                    write!(f, ", nb={}", r.nb)?;
+                }
+                if !r.nc.is_zero() {
+                    write!(f, ", nc={}", r.nc)?;
+                }
+            }
+            _ => {
+                write!(f, ", association_records=[")?;
+                for (i, record) in self.association_records.iter().enumerate() {
+                    write!(f, "{record}")?;
+                    if i < self.association_records.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "]")?;
+            }
         }
         if let Some(n) = &self.viscosity {
             write!(f, ", viscosity={:?}", n)?;
@@ -215,17 +338,22 @@ impl PcSaftRecord {
         na: Option<f64>,
         nb: Option<f64>,
         nc: Option<f64>,
-        association_records: Option<Vec<AssociationRecord<PcSaftAssociationRecord>>>,
+        mut association_records: Vec<AssociationRecord<PcSaftAssociationRecord>>,
         viscosity: Option<[f64; 4]>,
         diffusion: Option<[f64; 5]>,
         thermal_conductivity: Option<[f64; 4]>,
     ) -> PcSaftRecord {
-        let assoc = if let (Some(kappa_ab), Some(epsilon_k_ab)) = (kappa_ab, epsilon_k_ab) {
-            Some(PcSaftAssociationRecord::new(kappa_ab, epsilon_k_ab))
-        } else {
-            None
-        };
-        let association_records = AssociationRecords::new(assoc, na, nb, nc, association_records);
+        if na.is_some() || nb.is_some() || nc.is_some() {
+            association_records.push(AssociationRecord::new(
+                PcSaftAssociationRecord::new(
+                    kappa_ab.unwrap_or_default(),
+                    epsilon_k_ab.unwrap_or_default(),
+                ),
+                na.unwrap_or_default(),
+                nb.unwrap_or_default(),
+                nc.unwrap_or_default(),
+            ))
+        }
         PcSaftRecord {
             m,
             sigma,

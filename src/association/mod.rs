@@ -9,7 +9,6 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 #[cfg(feature = "dft")]
@@ -80,99 +79,6 @@ impl<A: fmt::Display> fmt::Display for AssociationRecord<A> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Default)]
-#[serde(from = "AssociationRecordsSerde<A>")]
-#[serde(into = "AssociationRecordsSerde<A>")]
-pub struct AssociationRecords<A: Clone + Default>(Vec<AssociationRecord<A>>);
-
-impl<A: Clone + Default> AssociationRecords<A> {
-    pub fn new(
-        parameters: Option<A>,
-        na: Option<f64>,
-        nb: Option<f64>,
-        nc: Option<f64>,
-        association_records: Option<Vec<AssociationRecord<A>>>,
-    ) -> Self {
-        let mut association_records = association_records.unwrap_or_default();
-        if let Some(parameters) = parameters {
-            association_records.push(AssociationRecord::new(
-                parameters,
-                na.unwrap_or_default(),
-                nb.unwrap_or_default(),
-                nc.unwrap_or_default(),
-            ))
-        }
-        Self(association_records)
-    }
-}
-
-impl<A: Clone + Default> Deref for AssociationRecords<A> {
-    type Target = Vec<AssociationRecord<A>>;
-
-    fn deref(&self) -> &Vec<AssociationRecord<A>> {
-        &self.0
-    }
-}
-
-impl<A: Clone + Default> DerefMut for AssociationRecords<A> {
-    fn deref_mut(&mut self) -> &mut Vec<AssociationRecord<A>> {
-        &mut self.0
-    }
-}
-
-impl<A: Clone + Default> FromIterator<AssociationRecord<A>> for AssociationRecords<A> {
-    fn from_iter<T: IntoIterator<Item = AssociationRecord<A>>>(iter: T) -> Self {
-        Self(Vec::from_iter(iter))
-    }
-}
-
-impl<A: Clone + Default + fmt::Display> fmt::Display for AssociationRecords<A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-        for (i, record) in self.0.iter().enumerate() {
-            write!(f, "{record}")?;
-            if i < self.0.len() - 1 {
-                write!(f, ", ")?;
-            }
-        }
-        write!(f, "]")
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct AssociationRecordsSerde<A> {
-    #[serde(flatten)]
-    single: Option<AssociationRecord<A>>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    association_records: Vec<AssociationRecord<A>>,
-}
-
-impl<A: Clone + Default> From<AssociationRecordsSerde<A>> for AssociationRecords<A> {
-    fn from(value: AssociationRecordsSerde<A>) -> Self {
-        let mut association_records = value.association_records;
-        if let Some(record) = value.single {
-            association_records.push(record);
-        }
-        Self(association_records)
-    }
-}
-
-impl<A: Clone + Default> From<AssociationRecords<A>> for AssociationRecordsSerde<A> {
-    fn from(value: AssociationRecords<A>) -> Self {
-        let mut association_records = value.0;
-        let single = if association_records.len() == 1 {
-            association_records.pop()
-        } else {
-            None
-        };
-        Self {
-            single,
-            association_records,
-        }
-    }
-}
-
 /// Binary association parameters.
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct BinaryAssociationRecord<B> {
@@ -212,7 +118,7 @@ pub struct AssociationParameters<P: AssociationStrength> {
 
 impl<P: AssociationStrength> AssociationParameters<P> {
     pub fn new(
-        records: &[AssociationRecords<P::Record>],
+        records: &[Vec<AssociationRecord<P::Record>>],
         binary_records: &[([usize; 2], BinaryAssociationRecord<P::BinaryRecord>)],
         component_index: Option<&Array1<usize>>,
     ) -> Self {
@@ -645,13 +551,10 @@ mod tests_pcsaft {
 
     #[test]
     fn test_binary_parameters() {
-        let comp1 = AssociationRecords(vec![record(0.1, 2500., 1.0, 1.0)]);
-        let comp2 = AssociationRecords(vec![record(0.2, 1500., 1.0, 1.0)]);
-        let comp3 = AssociationRecords(vec![record(0.3, 500., 0.0, 1.0)]);
-        let comp4 = AssociationRecords(vec![
-            record(0.3, 1000., 1.0, 0.0),
-            record(0.3, 2000., 0.0, 1.0),
-        ]);
+        let comp1 = vec![record(0.1, 2500., 1.0, 1.0)];
+        let comp2 = vec![record(0.2, 1500., 1.0, 1.0)];
+        let comp3 = vec![record(0.3, 500., 0.0, 1.0)];
+        let comp4 = vec![record(0.3, 1000., 1.0, 0.0), record(0.3, 2000., 0.0, 1.0)];
         let records = [comp1, comp2, comp3, comp4];
         let binary = [
             ([0, 1], binary_record(3.5, 1234., Some([0, 0]))),
@@ -670,9 +573,9 @@ mod tests_pcsaft {
 
     #[test]
     fn test_induced_association() {
-        let comp1 = AssociationRecords(vec![record(0.1, 2500., 1.0, 1.0)]);
-        let comp2 = AssociationRecords(vec![record(0.1, -500., 0.0, 1.0)]);
-        let comp3 = AssociationRecords(vec![record(0.0, 0.0, 0.0, 1.0)]);
+        let comp1 = vec![record(0.1, 2500., 1.0, 1.0)];
+        let comp2 = vec![record(0.1, -500., 0.0, 1.0)];
+        let comp3 = vec![record(0.0, 0.0, 0.0, 1.0)];
         let binary = [([0, 1], binary_record(0.1, 1000., None))];
         let assoc1 =
             AssociationParameters::<PcSaftParameters>::new(&[comp1.clone(), comp2], &[], None);

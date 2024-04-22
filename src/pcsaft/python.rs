@@ -1,7 +1,9 @@
-use crate::association::PyAssociationRecord;
-
-use super::parameters::{PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
+use super::parameters::{
+    PcSaftAssociationRecord, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord,
+};
 use super::DQVariants;
+use crate::association::AssociationRecord;
+// use crate::association::PyAssociationRecord;
 use feos_core::parameter::{
     BinaryRecord, Identifier, IdentifierOption, Parameter, ParameterError, PureRecord,
     SegmentRecord,
@@ -13,6 +15,56 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
+
+/// Pure component association parameters
+#[pyclass(name = "AssociationRecord")]
+#[derive(Clone)]
+pub struct PyAssociationRecord(pub AssociationRecord<PcSaftAssociationRecord>);
+
+#[pymethods]
+impl PyAssociationRecord {
+    #[new]
+    #[pyo3(signature = (kappa_ab, epsilon_k_ab, na=0.0, nb=0.0, nc=0.0))]
+    fn new(kappa_ab: f64, epsilon_k_ab: f64, na: f64, nb: f64, nc: f64) -> Self {
+        Self(AssociationRecord::new(
+            PcSaftAssociationRecord::new(kappa_ab, epsilon_k_ab),
+            na,
+            nb,
+            nc,
+        ))
+    }
+
+    #[getter]
+    fn get_kappa_ab(&self) -> f64 {
+        self.0.parameters.kappa_ab
+    }
+
+    #[getter]
+    fn get_epsilon_k_ab(&self) -> f64 {
+        self.0.parameters.epsilon_k_ab
+    }
+
+    #[getter]
+    fn get_na(&self) -> f64 {
+        self.0.na
+    }
+
+    #[getter]
+    fn get_nb(&self) -> f64 {
+        self.0.nb
+    }
+
+    #[getter]
+    fn get_nc(&self) -> f64 {
+        self.0.nc
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(self.0.to_string())
+    }
+}
+
+impl_json_handling!(PyAssociationRecord);
 
 /// Pure-substance parameters for the PC-Saft equation of state.
 ///
@@ -83,7 +135,10 @@ impl PyPcSaftRecord {
             na,
             nb,
             nc,
-            association_records.map(|r| r.into_iter().map(|r| r.0).collect()),
+            association_records
+                .into_iter()
+                .flat_map(|r| r.into_iter().map(|r| r.0))
+                .collect(),
             viscosity,
             diffusion,
             thermal_conductivity,
@@ -115,15 +170,15 @@ impl PyPcSaftRecord {
         self.0.q
     }
 
-    #[getter]
-    fn get_association_records(&self) -> Vec<PyAssociationRecord> {
-        self.0
-            .association_records
-            .iter()
-            .copied()
-            .map(PyAssociationRecord)
-            .collect()
-    }
+    // #[getter]
+    // fn get_association_records(&self) -> Vec<PyAssociationRecord> {
+    //     self.0
+    //         .association_records
+    //         .iter()
+    //         .copied()
+    //         .map(PyAssociationRecord)
+    //         .collect()
+    // }
 
     #[getter]
     fn get_viscosity(&self) -> Option<[f64; 4]> {
