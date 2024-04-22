@@ -170,15 +170,15 @@ impl PyPcSaftRecord {
         self.0.q
     }
 
-    // #[getter]
-    // fn get_association_records(&self) -> Vec<PyAssociationRecord> {
-    //     self.0
-    //         .association_records
-    //         .iter()
-    //         .copied()
-    //         .map(PyAssociationRecord)
-    //         .collect()
-    // }
+    #[getter]
+    fn get_association_records(&self) -> Vec<PyAssociationRecord> {
+        self.0
+            .association_records
+            .iter()
+            .copied()
+            .map(PyAssociationRecord)
+            .collect()
+    }
 
     #[getter]
     fn get_viscosity(&self) -> Option<[f64; 4]> {
